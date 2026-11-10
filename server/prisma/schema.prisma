@@ -1,0 +1,218 @@
+// Victory Video Studio — central content model.
+//
+// One hierarchy: Course -> Module -> Lesson -> Resource. Every external system's identifier
+// (Bunny video ID, S3 key, Moodle section/activity ID) is stored directly on the record it
+// belongs to — there is no parallel naming system or lookup table mapping "our" IDs to theirs.
+//
+// SQLite by default (zero external dependencies for a single-server Cloudways deployment).
+// Upgrading to Postgres is a one-line change: swap `provider = "sqlite"` for `"postgresql"`
+// below and point DATABASE_URL at a Postgres connection string — no schema changes needed.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model BrandTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  isDefault   Boolean  @default(false)
+  colors      String   // JSON: BrandTheme palette overrides
+  fonts       String   // JSON: BrandTheme font overrides
+  cover       String   // JSON: {kicker, bullets}
+  logoPath        String?
+  introVideoPath  String?
+  outroVideoPath  String?
+  width           Int     @default(1920)
+  height          Int     @default(1080)
+  fps             Int     @default(30)
+  audioBitrate    String  @default("192k")
+  captionsEnabled Boolean @default(false)
+  captionFontSize Int     @default(34)
+  captionPosition String  @default("bottom")
+  textScale       Float   @default(1.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  courses Course[]
+}
+
+model Voice {
+  id              String   @id @default(cuid())
+  name            String
+  elevenLabsVoiceId String
+  isDefault       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  courses Course[]
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String   @default("")
+  status      String   @default("draft") // draft | producing | published
+
+  // Course Defaults — saved brand/voice/Moodle/AWS/Bunny settings, reused on regeneration.
+  brandTemplateId String?
+  brandTemplate   BrandTemplate? @relation(fields: [brandTemplateId], references: [id])
+  voiceId         String?
+  voice           Voice?   @relation(fields: [voiceId], references: [id])
+
+  awsBucket     String?
+  awsRegion     String?
+  awsKeyPrefix  String?
+
+  bunnyLibraryId    String?
+  bunnyCollectionId String?
+
+  moodleCourseId Int?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules   Module[]
+  documents Document[]
+
+  @@index([status])
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  number      String
+  title       String
+  description String   @default("")
+  order       Int      @default(0)
+  moodleSectionId Int?
+
+  lessons Lesson[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([courseId, number])
+  @@index([courseId])
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  moduleId    String
+  module      Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  number      String
+  order       Int      @default(0)
+  title       String
+  lessonType  String   @default("video") // video | resource | quiz
+  description String   @default("")
+  videoDescription String @default("")
+  scriptText  String   @default("")
+  scriptHash  String   @default("")
+  knowledgeChecks String @default("[]") // JSON string[]
+  productionInstructions String @default("")
+  tags        String   @default("[]") // JSON string[]
+
+  // Per-lesson overrides of course defaults (manual override support).
+  brandTemplateId String?
+  voiceId         String?
+
+  status      String   @default("not_started") // not_started | producing | complete | failed
+  videoPath   String?
+  videoDurationSeconds Float?
+  narrationPath String?
+  editableAssetPath String?
+
+  bunnyVideoId  String?
+  awsVideoKey   String?
+  moodleActivityId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  resources Resource[]
+  jobSteps  JobStep[]
+
+  @@unique([moduleId, number])
+  @@index([moduleId])
+}
+
+model Resource {
+  id          String   @id @default(cuid())
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  title       String
+  description String   @default("")
+  instructions String  @default("")
+  filename    String   @default("")
+  resourceType String  @default("file") // pdf | doc | link | file
+  storagePath String?
+  linkUrl     String?
+
+  awsKey          String?
+  moodleFileId    Int?
+  moodleActivityId Int?
+
+  status      String   @default("not_started") // not_started | uploading | complete | failed
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([lessonId])
+}
+
+model Document {
+  id            String   @id @default(cuid())
+  courseId      String?
+  course        Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  filename      String
+  storedPath    String
+  status        String   @default("uploaded") // uploaded | parsed | approved | failed
+  parsedCourseJson String? // JSON snapshot of the parser's output, for the review/approve step
+  diffJson      String?  // JSON: NEW/CHANGED/UNCHANGED/REMOVED diff against the existing course
+  error         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+}
+
+// A single unit of work in the production pipeline. `resourceId` uses an empty-string sentinel
+// (rather than null) for "this step belongs to the lesson itself, not one of its resources",
+// because SQLite compound unique indexes cannot match NULL via findUnique — and because Prisma
+// requires an optional relation's foreign key column to itself be nullable, this is deliberately
+// a plain sentinel column rather than a formal `@relation` to Resource; the app layer resolves
+// resourceId -> Resource by hand on the rare path that needs it (and deletes a resource's
+// JobSteps itself when the resource is deleted, since there is no cascade to drive it).
+model JobStep {
+  id          String   @id @default(cuid())
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  resourceId  String   @default("")
+  step        String   // slides | narration | video | editable_assets | aws_upload | bunny_upload | moodle_publish | resource_upload | resource_moodle
+  status      String   @default("pending") // pending | queued | running | complete | failed
+  error       String?
+  resultJson  String?
+  attempts    Int      @default(0)
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lessonId, step, resourceId])
+  @@index([status])
+  @@index([lessonId])
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
