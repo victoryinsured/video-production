@@ -1,0 +1,20 @@
+[project]
+name = "victory-engine"
+version = "2.0.0"
+description = "Victory Video Studio rendering engine (slides, narration, video assembly, editable assets)."
+requires-python = ">=3.10"
+dependencies = [
+    "Pillow>=10.0.0",
+    "python-docx>=1.1.0",
+    "pypdf>=4.0.0",
+    "python-pptx>=0.6.23",
+    "openpyxl>=3.1.0",
+    "requests>=2.31.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
