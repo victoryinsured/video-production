@@ -69,8 +69,25 @@ async function runOnce(): Promise<boolean> {
   return true;
 }
 
+/**
+ * A step left "running" when a previous worker process was killed (deploy restart, crash,
+ * OOM-kill) is not actually in flight anymore — nothing is still executing it — so it would
+ * otherwise sit stuck forever (the claim query in claimNextStep only ever looks at "pending"
+ * rows). Reset any such orphaned rows back to "pending" once, at startup, before polling begins.
+ */
+async function recoverOrphanedSteps(): Promise<void> {
+  const result = await prisma.jobStep.updateMany({
+    where: { status: "running" },
+    data: { status: "pending" },
+  });
+  if (result.count > 0) {
+    console.log(`[worker] recovered ${result.count} step(s) left "running" by a previous process.`);
+  }
+}
+
 async function loop() {
   console.log("[worker] Victory Video Studio job-queue worker started.");
+  await recoverOrphanedSteps();
   while (!shuttingDown) {
     let didWork = false;
     try {
