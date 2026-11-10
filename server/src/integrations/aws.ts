@@ -47,6 +47,25 @@ export async function testAwsConnection(bucket: string, region?: string): Promis
     await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: testKey }));
     return { ok: true, message: `Connected. Bucket "${bucket}" is reachable and writable.` };
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    return { ok: false, message: describeS3Error(err, bucket) };
   }
+}
+
+/**
+ * HeadBucket returns an empty body on both 403 and 404, so the AWS SDK's XML error parser often
+ * can't extract a real error code or message and falls back to a useless "UnknownError". The
+ * HTTP status code is still reliable, so this reads it directly off the error's $metadata and
+ * reports something a user can actually act on.
+ */
+function describeS3Error(err: unknown, bucket: string): string {
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | undefined)?.$metadata?.httpStatusCode;
+  const name = err instanceof Error ? err.name : undefined;
+  if (status === 404 || name === "NotFound") {
+    return `Bucket "${bucket}" was not found (404). Check the bucket name and region.`;
+  }
+  if (status === 403 || name === "Forbidden") {
+    return `Access denied (403) for bucket "${bucket}". Check that these credentials have permission to access it.`;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return status ? `Request failed (HTTP ${status}): ${message}` : message;
 }
