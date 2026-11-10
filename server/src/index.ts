@@ -13,6 +13,7 @@ import { voicesRouter } from "./routes/voices";
 import { jobsRouter } from "./routes/jobs";
 import { dashboardRouter } from "./routes/dashboard";
 import { diagnosticsRouter } from "./routes/diagnostics";
+import { loop as runWorkerLoop } from "./queue/worker";
 
 const app = express();
 
@@ -59,3 +60,13 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 app.listen(env.port, () => {
   console.log(`Victory Video Studio API listening on port ${env.port} (${env.nodeEnv}).`);
 });
+
+// RUN_WORKER_INLINE=true runs the job-queue worker's poll loop inside this same process,
+// instead of as a separate process — for hosts (e.g. Cloudways' Node.js app type) that only
+// manage one process per app. Not awaited: it's an infinite loop running alongside the server.
+if (env.runWorkerInline) {
+  console.log("Victory Video Studio: RUN_WORKER_INLINE=true — running the job-queue worker in this same process.");
+  runWorkerLoop().catch((err) => {
+    console.error("[worker] fatal error (inline):", err);
+  });
+}

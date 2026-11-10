@@ -85,7 +85,7 @@ async function recoverOrphanedSteps(): Promise<void> {
   }
 }
 
-async function loop() {
+export async function loop() {
   console.log("[worker] Victory Video Studio job-queue worker started.");
   await recoverOrphanedSteps();
   while (!shuttingDown) {

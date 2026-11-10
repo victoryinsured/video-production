@@ -31,6 +31,12 @@ export const env = {
   pythonBin: optional("PYTHON_BIN") ?? "python3",
   engineDir: required("ENGINE_DIR", "../engine"),
 
+  // Hosts that only run a single process per app (Cloudways' Node.js app type among them) can
+  // set this instead of running server/src/queue/worker.ts as a second process — see
+  // src/index.ts and DEPLOYMENT.md's "Single-process hosts" section. Off by default so the
+  // documented two-process (systemd) setup isn't silently doubled up.
+  runWorkerInline: (optional("RUN_WORKER_INLINE") ?? "false").toLowerCase() === "true",
+
   elevenLabsApiKey: optional("ELEVENLABS_API_KEY"),
 
   awsAccessKeyId: optional("AWS_ACCESS_KEY_ID"),

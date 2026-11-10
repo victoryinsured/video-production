@@ -39,6 +39,56 @@ ffmpeg/Python/a second background worker there, and you should provision a plain
 own "server" product, or a separate DigitalOcean/Linode/Vultr droplet) for this specific app
 instead — there is no way around the process/runtime requirements above.
 
+## Single-process hosts (Cloudways' Node.js app type)
+
+Cloudways' Node.js application type manages exactly one process per app (start/stop/restart
+through their dashboard, PM2 under the hood). Rather than fight that, set `RUN_WORKER_INLINE=true`
+(see `.env.example`) — this runs the job-queue worker's poll loop inside the same process as the
+API server (`server/src/index.ts`), so "one app" is all you need. The two-process (systemd) setup
+further down is only necessary if you want the API and worker fully isolated from each other, e.g.
+so a worker running a long video render can't affect API responsiveness.
+
+Steps, via the SSH access your Cloudways dashboard gives you (Server -> Access Details/Master
+Credentials, or Server -> SSH Keys to add your own key — exact tab names have moved around
+Cloudways' UI over time, so check whichever your account currently shows):
+
+```bash
+ssh <ssh-user>@<your-server-ip>
+cd applications/<your-app-id>/public_html   # the path your dashboard shows for this app
+
+git clone <your-repo-url> .                  # or `git pull` if you've already cloned once
+
+sudo apt-get update && sudo apt-get install -y python3 python3-venv ffmpeg   # if not already present
+
+cd engine && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd ..
+
+cd server
+npm ci
+cp ../.env.example .env
+# edit .env: set SESSION_SECRET, ADMIN_PASSWORD, RUN_WORKER_INLINE=true, and whichever
+# integration credentials you have — see /INTEGRATIONS.md
+nano .env
+npx prisma migrate deploy
+npx prisma generate
+npm run build
+cd ..
+
+cd web && npm ci && npm run build && cd ..
+```
+
+Then in the Cloudways dashboard's Application Settings for this app:
+- Set the **startup file** to `server/dist/index.js`.
+- Make sure the app's **Node version** is 18+ (20 recommended).
+- Set **`NODE_ENV=production`** as an environment variable if your dashboard has an environment
+  variables section for Node apps; otherwise it's already in `server/.env` and gets picked up
+  from there.
+- Click **Restart Application**.
+
+Your Cloudways dashboard already shows a URL (your app's domain, or a temporary one Cloudways
+assigns) — that's the real, working URL once the app restarts cleanly. Check the app's log
+(Cloudways' dashboard has a log viewer for Node apps) for `Victory Video Studio API listening on
+port ...` to confirm it actually started.
+
 ## Generic VPS setup (Ubuntu 22.04+, applies to Cloudways' own server product or any other VPS)
 
 ```bash
