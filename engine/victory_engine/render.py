@@ -163,10 +163,11 @@ def render_map_slide(brand: BrandTheme, spec: SlideSpec) -> Image.Image:
 
     draw.text((MARGIN, 120), spec.heading, font=heading_font, fill=brand.maroon)
 
-    n = max(1, len(spec.bullets))
+    bullets = spec.bullets[:8]
+    n = max(1, len(bullets))
     card_w = (brand.width - 2 * MARGIN - (n - 1) * 30) // n
     y = 280
-    for i, bullet in enumerate(spec.bullets[:5]):
+    for i, bullet in enumerate(bullets):
         x = MARGIN + i * (card_w + 30)
         _draw_rounded_rect(draw, [x, y, x + card_w, y + 420], radius=18,
                             fill=brand.off_white, outline=brand.border, width=2)
