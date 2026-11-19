@@ -1,10 +1,12 @@
 from pathlib import Path
 
+from victory_engine.brand import DEFAULT_BRAND
 from victory_engine.video import (
     MAX_CAPTION_CHARS,
     MIN_SHORT_SECONDS,
     MIN_STATEMENT_SECONDS,
     SlideTiming,
+    _captions_filter,
     _split_caption_cues,
     paragraph_weights,
     write_captions_srt,
@@ -99,3 +101,11 @@ def test_write_captions_srt_splits_long_slide_text_into_multiple_timed_cues():
     for line in content.split("\n"):
         if "-->" not in line and line.strip() and not line.strip().isdigit():
             assert len(line) <= MAX_CAPTION_CHARS
+
+
+def test_captions_filter_pins_original_size_to_the_real_frame():
+    # Without this, libass interprets FontSize against its 384x288 ASS default instead of the
+    # actual video resolution, rendering captions roughly 4x too large on a 1920x1080 frame.
+    filter_str = _captions_filter(Path("captions.srt"), DEFAULT_BRAND)
+    assert f"original_size={DEFAULT_BRAND.width}x{DEFAULT_BRAND.height}" in filter_str
+    assert f"FontSize={DEFAULT_BRAND.caption_font_size}" in filter_str

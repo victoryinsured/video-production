@@ -154,6 +154,19 @@ def _slideshow_concat_file(timings: List[SlideTiming], concat_path: Path) -> Non
     concat_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def _captions_filter(captions_path: Path, brand: BrandTheme) -> str:
+    """The ffmpeg -vf fragment that burns captions in. A plain .srt carries no PlayResX/
+    PlayResY, so libass falls back to its historical ASS default reference size (384x288) to
+    interpret FontSize against — on a 1920x1080 frame that silently blows a modest caption size
+    up by roughly 4x. original_size tells it the real frame size so FontSize actually means what
+    brand.caption_font_size says."""
+    position = "Alignment=2" if brand.caption_position == "bottom" else "Alignment=6"
+    return (
+        f"subtitles={captions_path}:original_size={brand.width}x{brand.height}"
+        f":force_style='FontSize={brand.caption_font_size},{position}'"
+    )
+
+
 def assemble_video(
     slide_paths: List[Path],
     slide_texts: List[str],
@@ -184,10 +197,7 @@ def assemble_video(
     captions_path: Optional[Path] = None
     if brand.captions_enabled:
         captions_path = write_captions_srt(timings, work_dir / "captions.srt")
-        position = "Alignment=2" if brand.caption_position == "bottom" else "Alignment=6"
-        vf_filters.append(
-            f"subtitles={captions_path}:force_style='FontSize={brand.caption_font_size},{position}'"
-        )
+        vf_filters.append(_captions_filter(captions_path, brand))
 
     _run([
         "ffmpeg", "-y",
