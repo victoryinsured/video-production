@@ -1,0 +1,32 @@
+{
+  "course_name": "Victory Framework",
+  "module_number": 2,
+  "module_name": "The Engine — Getting Answers to What You Don't Know",
+  "input_pattern": "*.docx",
+  "overwrite_existing_audio": false,
+  "overwrite_existing_videos": true,
+  "treat_lesson_headings_as_metadata": true,
+  "elevenlabs": {
+    "enabled": false,
+    "api_key": "",
+    "api_key_env_var": "ELEVENLABS_API_KEY",
+    "voice_id": "Victoria Voice",
+    "model_id": "eleven_multilingual_v2",
+    "stability": 0.55,
+    "similarity_boost": 0.8,
+    "style": 0.05,
+    "use_speaker_boost": true,
+    "max_chars_per_request": 4500,
+    "overwrite_existing_audio": false
+  },
+  "video": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "audio_bitrate": "192k"
+  },
+  "delivery": {
+    "copy_to_google_drive_sync_folder": false,
+    "google_drive_sync_folder": ""
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Victory Video Studio",
+  "short_name": "Victory Studio",
+  "description": "Upload a curriculum document and produce narrated, branded course video.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2a0c14",
+  "theme_color": "#49121f",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
