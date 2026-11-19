@@ -12,6 +12,7 @@ through ffmpeg's `subtitles` filter (requires libass, bundled with most ffmpeg b
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -78,15 +79,60 @@ def _format_srt_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{ms:03d}"
 
 
+MAX_CAPTION_CHARS = 84
+MIN_CAPTION_SECONDS = 0.9
+
+
+def _split_caption_cues(text: str, max_chars: int = MAX_CAPTION_CHARS) -> List[str]:
+    """Break a slide's full narration chunk into short, readable caption-sized pieces. A caption
+    showing an entire multi-sentence paragraph at once word-wraps into a dozen+ lines that fill
+    the whole frame — captions need to be a line or two, timed across the slide, not one giant
+    cue for the slide's whole on-screen duration."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    cues: List[str] = []
+    current = ""
+    for sentence in sentences:
+        candidate = f"{current} {sentence}".strip() if current else sentence
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+        if current:
+            cues.append(current)
+        if len(sentence) <= max_chars:
+            current = sentence
+        else:
+            # A single sentence longer than the limit: split on word boundaries instead.
+            words = sentence.split()
+            current = ""
+            for word in words:
+                trial = f"{current} {word}".strip()
+                if len(trial) <= max_chars:
+                    current = trial
+                else:
+                    if current:
+                        cues.append(current)
+                    current = word
+    if current:
+        cues.append(current)
+    return cues or [text.strip()]
+
+
 def write_captions_srt(timings: List[SlideTiming], output_path: Path) -> Path:
     lines = []
-    for i, timing in enumerate(timings, start=1):
+    index = 1
+    for timing in timings:
         if not timing.text.strip():
             continue
-        lines.append(str(i))
-        lines.append(f"{_format_srt_timestamp(timing.start)} --> {_format_srt_timestamp(timing.start + timing.duration)}")
-        lines.append(timing.text.strip())
-        lines.append("")
+        cues = _split_caption_cues(timing.text)
+        cue_durations = paragraph_weights(cues, timing.duration, floors=[MIN_CAPTION_SECONDS] * len(cues))
+        cursor = timing.start
+        for cue_text, cue_duration in zip(cues, cue_durations):
+            lines.append(str(index))
+            lines.append(f"{_format_srt_timestamp(cursor)} --> {_format_srt_timestamp(cursor + cue_duration)}")
+            lines.append(cue_text)
+            lines.append("")
+            cursor += cue_duration
+            index += 1
     output_path.write_text("\n".join(lines), encoding="utf-8")
     return output_path
 
