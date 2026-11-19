@@ -85,8 +85,12 @@ class BrandTheme:
     audio_bitrate: str = "192k"
 
     # Caption style is new configurability (legacy engine burned no captions into video).
+    # 16 is not a typo for a "small" font: ffmpeg's subtitles filter renders ASS FontSize at
+    # roughly 3x the glyph height a raw pixel value would suggest (confirmed empirically — see
+    # video.py's _captions_filter docstring) — at a 1920x1080 frame, 16 reads as a normal,
+    # properly-sized caption; 34 renders enormous and wraps a single sentence across 3 lines.
     captions_enabled: bool = False
-    caption_font_size: int = 34
+    caption_font_size: int = 16
     caption_position: str = "bottom"  # "bottom" | "top"
 
     # Global text-size multiplier so a course can bump legibility without redesigning layouts.

@@ -104,8 +104,49 @@ def test_write_captions_srt_splits_long_slide_text_into_multiple_timed_cues():
 
 
 def test_captions_filter_pins_original_size_to_the_real_frame():
-    # Without this, libass interprets FontSize against its 384x288 ASS default instead of the
-    # actual video resolution, rendering captions roughly 4x too large on a 1920x1080 frame.
+    # Set for correctness per ffmpeg's own docs, should the frame ever be scaled relative to
+    # brand.width/height — see _captions_filter's docstring for what this does and doesn't fix.
     filter_str = _captions_filter(Path("captions.srt"), DEFAULT_BRAND)
     assert f"original_size={DEFAULT_BRAND.width}x{DEFAULT_BRAND.height}" in filter_str
     assert f"FontSize={DEFAULT_BRAND.caption_font_size}" in filter_str
+
+
+def test_default_caption_font_size_actually_renders_legibly(tmp_path):
+    # Direct pixel measurement, not just a filter-string check: renders a real frame with a
+    # full, unsplit sentence and confirms it reads as a normal caption (fits on <=2 lines, each
+    # line well under half the frame height) rather than the ~105-110px-tall, 3-line-wrapped
+    # text a FontSize of 34 produced on this same 1920x1080 frame before this default was fixed.
+    import shutil
+    import subprocess
+
+    from PIL import Image
+
+    if not shutil.which("ffmpeg"):
+        return  # engine/README.md documents ffmpeg as a hard requirement; skip if absent here.
+
+    srt_path = tmp_path / "cap.srt"
+    srt_path.write_text(
+        "1\n00:00:00,000 --> 00:00:03,000\n"
+        "Identifying Operations tells us where someone creates value, but not what they help "
+        "accomplish.\n",
+        encoding="utf-8",
+    )
+    frame_path = tmp_path / "frame.png"
+    filter_str = _captions_filter(srt_path, DEFAULT_BRAND)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=maroon:s={DEFAULT_BRAND.width}x{DEFAULT_BRAND.height}:d=1",
+            "-vf", filter_str, "-frames:v", "1", "-update", "1", str(frame_path),
+        ],
+        check=True, capture_output=True,
+    )
+
+    img = Image.open(frame_path).convert("L")
+    w, h = img.size
+    pixels = img.load()
+    bright_rows = [y for y in range(h) if any(pixels[x, y] > 200 for x in range(0, w, 3))]
+    assert bright_rows, "expected visible caption text in the rendered frame"
+    text_block_height = max(bright_rows) - min(bright_rows)
+    # Two lines of a legible caption fit in well under half the frame; 3 lines of the old
+    # oversized rendering spanned roughly a third of it (~360px of 1080).
+    assert text_block_height < h * 0.3

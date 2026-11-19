@@ -155,11 +155,16 @@ def _slideshow_concat_file(timings: List[SlideTiming], concat_path: Path) -> Non
 
 
 def _captions_filter(captions_path: Path, brand: BrandTheme) -> str:
-    """The ffmpeg -vf fragment that burns captions in. A plain .srt carries no PlayResX/
-    PlayResY, so libass falls back to its historical ASS default reference size (384x288) to
-    interpret FontSize against — on a 1920x1080 frame that silently blows a modest caption size
-    up by roughly 4x. original_size tells it the real frame size so FontSize actually means what
-    brand.caption_font_size says."""
+    """The ffmpeg -vf fragment that burns captions in.
+
+    `original_size` is set for correctness per ffmpeg's own docs ("used to scale fonts"), should
+    the slideshow ever be scaled to a size other than brand.width/height — but on a matching
+    1920x1080 render it measurably changes nothing: ASS `FontSize` here renders at roughly 3x
+    the glyph height a raw pixel value would suggest regardless of original_size, confirmed by
+    direct pixel measurement (a FontSize of 34 rendered ~105-110px tall glyphs and wrapped a
+    single sentence across 3 lines; empirically, 16 reads as a normal caption at this frame
+    size). brand.caption_font_size's default is set accordingly — see brand.py.
+    """
     position = "Alignment=2" if brand.caption_position == "bottom" else "Alignment=6"
     return (
         f"subtitles={captions_path}:original_size={brand.width}x{brand.height}"
